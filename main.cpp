@@ -1,39 +1,108 @@
+#include "window_styles.h"
 #include <Windows.h>
+#include <codecvt>
+#include <fstream>
+#include <iostream>
 #include <map>
+#include <regex>
+#include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #define APP_NAME L"MWGA"
-#define TESTDEF 101
+#define HERE() do { std::cout << "[" << __LINE__ << "]\n"; } while(false)
 
 HINSTANCE hinst;
-HWND clickinerval, textbox1, hour, textbox2, minute, textbox3, textbox4, second, milisecond, holdduration, testbutton;
+
+template<typename T, typename Function>
+inline void iterate_str(const std::basic_string<T>& s, const std::basic_regex<T>& r, Function fn)
+{
+    std::regex_token_iterator<typename std::basic_string<T>::const_iterator> it(s.begin(), s.end(), r, -1);
+    std::regex_token_iterator<typename std::basic_string<T>::const_iterator> end;
+    for(; it != end; ++it) {
+        fn(it->str());
+    }
+}
+
+template<typename T>
+inline std::vector<std::basic_string<T>> split_str(const std::basic_string<T>& s, const std::basic_regex<T>& r)
+{
+    std::vector<std::basic_string<T>> result;
+    iterate_str(s, r, [&result](const std::basic_string<T>& s) {
+        result.push_back(s);
+    });
+    return result;
+}
+
+unsigned parseStyle(const std::wstring& s)
+{
+    static const std::wregex r(L"\\s*\\|\\s*");
+    unsigned result = 0;
+    auto tokens = split_str(s, r);
+    for(const auto& token : tokens) {
+        if(!token.empty()) {
+            auto it = _stylesMap.find(token);
+            if(it == _stylesMap.end()) {
+                std::wcerr << L"Invalid style: " << token << L"\n";
+                throw std::runtime_error("Invalid style");
+            }
+            result |= it->second;
+        }
+    }
+    return result;
+}
 
 struct Control {
-    HWND* variable;
     std::wstring className;
     std::wstring caption;
     unsigned style;
     int x, y, w, h;
     intptr_t id;
+    HWND hwnd;
 };
+std::vector<Control> _controls;
 
-void OnCreate(HWND hwnd)
+std::vector<Control> loadControls(const std::wstring& filename)
 {
-    std::vector<Control> controls = {
-        { &clickinerval, L"Button", L"Click inerval", BS_GROUPBOX | WS_VISIBLE | WS_CHILD, 10, 10, 416, 55, 0 },
-        { &textbox1, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 20, 31, 42, 22, 0 },
-        { &hour, L"Static", L"Hour", WS_CHILD | WS_VISIBLE, 67, 33, 27, 22, 0 },
-        { &textbox2, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 99, 31, 42, 22, 0 },
-        { &minute, L"Static", L"Minutes", WS_CHILD | WS_VISIBLE, 146, 33, 47, 22, 0 },
-        { &textbox3, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 198, 31, 42, 22, 0 },
-        { &textbox4, L"Static", L"Seconds", WS_CHILD | WS_VISIBLE, 245, 33, 50, 22, 0 },
-        { &second, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 300, 31, 42, 22, 0 },
-        { &milisecond, L"Static", L"Miliseconds", WS_CHILD | WS_VISIBLE, 347, 33, 74, 22, 0 },
-        { &holdduration, L"Button", L"Hold duration", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 10, 65, 416, 55, 0 },
-        { &testbutton, L"Button", L"Click me", WS_CHILD | WS_VISIBLE, 10, 100, 50, 50, TESTDEF },
-    };
+    using namespace std;
+    vector<Control> controls;
 
+    wifstream is(L"controls.csv", ios::in);
+    if(!is)
+        throw system_error(errno, system_category());
+    is.exceptions(ios::badbit);
+    is.imbue(locale(is.getloc(), new codecvt_utf16<wchar_t, 0x10ffff, consume_header>));
+    
+    wregex tokenSep(L"\\s*;\\s*");
+
+    wstring line;
+    int line_number = 1;
+    while(getline(is, line)) {
+        vector<wstring> tokens = split_str(line, tokenSep);
+        if(tokens.size() == 8) {
+            Control ctl;
+            ctl.className = tokens[0];
+            ctl.caption = tokens[1];
+            ctl.style = parseStyle(tokens[2]);
+            ctl.x = stoi(tokens[3]);
+            ctl.y = stoi(tokens[4]);
+            ctl.w = stoi(tokens[5]);
+            ctl.h = stoi(tokens[6]);
+            ctl.id = stoi(tokens[7]);
+            controls.push_back(std::move(ctl));
+        } else if(tokens.size() > 1) {
+            stringstream ss;
+            ss << "Error at line " << line_number << ", found " << tokens.size() << " tokens\n";
+            throw std::runtime_error(ss.str());
+        }
+        line_number++;
+    }
+    return controls;
+}
+
+void createControls(HWND hwnd, std::vector<Control>& controls)
+{
     for(auto& ctl : controls) {
         auto hctl = CreateWindow(
                 ctl.className.c_str(),
@@ -44,8 +113,20 @@ void OnCreate(HWND hwnd)
                 reinterpret_cast<HMENU>(ctl.id),
                 hinst,
                 nullptr);
-        *ctl.variable = hctl;
+        if(!hctl) {
+            throw std::runtime_error("Failed to create control");
+        }
+        ctl.hwnd = hctl;
     }
+}
+
+void refreshWindow(HWND hwnd, const std::wstring& filename)
+{
+    for(auto& ctl : _controls) {
+        DestroyWindow(ctl.hwnd);
+    }
+    _controls = loadControls(filename);
+    createControls(hwnd, _controls);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -56,8 +137,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
-        case WM_CREATE:
-            OnCreate(hwnd);
+        case WM_KEYUP:
+            if(wparam == VK_F5) {
+                refreshWindow(hwnd, L"controls.csv");
+            }
             return 0;
     }
 }
@@ -85,6 +168,10 @@ INT APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
             NULL);
     if(!hwnd)
         return -1;
+
+    _controls = loadControls(L"controls.csv");
+    createControls(hwnd, _controls);
+
     ShowWindow(hwnd, nShowCmd);
     UpdateWindow(hwnd);
 
@@ -95,6 +182,7 @@ INT APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
     }
     return 0;
 }
+
 
 
 
