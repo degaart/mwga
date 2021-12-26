@@ -1,0 +1,7 @@
+obj
+._*
+*.swp
+.DS_Store
+wine
+build.sh
+run-project.sh
