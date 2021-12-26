@@ -1,4 +1,7 @@
 #include <Windows.h>
+#include <map>
+#include <string>
+#include <vector>
 
 #define APP_NAME L"MWGA"
 #define TESTDEF 101
@@ -6,19 +9,43 @@
 HINSTANCE hinst;
 HWND clickinerval, textbox1, hour, textbox2, minute, textbox3, textbox4, second, milisecond, holdduration, testbutton;
 
+struct Control {
+    HWND* variable;
+    std::wstring className;
+    std::wstring caption;
+    unsigned style;
+    int x, y, w, h;
+    intptr_t id;
+};
+
 void OnCreate(HWND hwnd)
 {
-    clickinerval = CreateWindow(L"Button", L"Click inerval", BS_GROUPBOX | WS_VISIBLE | WS_CHILD, 10, 10, 416, 55, hwnd, NULL, hinst, NULL);
-    textbox1 = CreateWindow(L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 20, 31, 42, 22, hwnd, NULL, hinst, NULL);
-    hour = CreateWindow(L"Static", L"Hour", WS_CHILD | WS_VISIBLE, 67, 33, 27, 22, hwnd, NULL, hinst, NULL);
-    textbox2 = CreateWindow(L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 99, 31, 42, 22, hwnd, NULL, hinst, NULL);
-    minute = CreateWindow(L"Static", L"Minutes", WS_CHILD | WS_VISIBLE, 146, 33, 47, 22, hwnd, NULL, hinst, NULL);
-    textbox3 = CreateWindow(L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 198, 31, 42, 22, hwnd, NULL, hinst, NULL);
-    second = CreateWindow(L"Static", L"Seconds", WS_CHILD | WS_VISIBLE, 245, 33, 50, 22, hwnd, NULL, hinst, NULL);
-    textbox4 = CreateWindow(L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 300, 31, 42, 22, hwnd, NULL, hinst, NULL);
-    milisecond = CreateWindow(L"Static", L"Miliseconds", WS_CHILD | WS_VISIBLE, 347, 33, 74, 22, hwnd, NULL, hinst, NULL);
-    holdduration = CreateWindow(L"Button", L"Hold duration", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 10, 65, 416, 55, hwnd, NULL, hinst, NULL);
-    testbutton = CreateWindow(L"Button", L"Click me", WS_CHILD | WS_VISIBLE, 10, 100, 50, 50, hwnd, (HMENU)TESTDEF, hinst, NULL);
+    std::vector<Control> controls = {
+        { &clickinerval, L"Button", L"Click inerval", BS_GROUPBOX | WS_VISIBLE | WS_CHILD, 10, 10, 416, 55, 0 },
+        { &textbox1, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 20, 31, 42, 22, 0 },
+        { &hour, L"Static", L"Hour", WS_CHILD | WS_VISIBLE, 67, 33, 27, 22, 0 },
+        { &textbox2, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 99, 31, 42, 22, 0 },
+        { &minute, L"Static", L"Minutes", WS_CHILD | WS_VISIBLE, 146, 33, 47, 22, 0 },
+        { &textbox3, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 198, 31, 42, 22, 0 },
+        { &textbox4, L"Static", L"Seconds", WS_CHILD | WS_VISIBLE, 245, 33, 50, 22, 0 },
+        { &second, L"Edit", L"", ES_NUMBER | WS_CHILD | WS_VISIBLE | WS_BORDER, 300, 31, 42, 22, 0 },
+        { &milisecond, L"Static", L"Miliseconds", WS_CHILD | WS_VISIBLE, 347, 33, 74, 22, 0 },
+        { &holdduration, L"Button", L"Hold duration", WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 10, 65, 416, 55, 0 },
+        { &testbutton, L"Button", L"Click me", WS_CHILD | WS_VISIBLE, 10, 100, 50, 50, TESTDEF },
+    };
+
+    for(auto& ctl : controls) {
+        auto hctl = CreateWindow(
+                ctl.className.c_str(),
+                ctl.caption.c_str(),
+                ctl.style,
+                ctl.x, ctl.y, ctl.w, ctl.h,
+                hwnd,
+                reinterpret_cast<HMENU>(ctl.id),
+                hinst,
+                nullptr);
+        *ctl.variable = hctl;
+    }
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
